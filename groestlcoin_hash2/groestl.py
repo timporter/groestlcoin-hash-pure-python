@@ -1,4 +1,5 @@
 from copy import deepcopy
+from functools import reduce
 
 class base_hash(object):
     def __init__(self, initial_pt = None):
@@ -18,7 +19,7 @@ def xor(*args):
 
     for x in args[1:]:
         assert len(x) == len(accum)
-        for i in xrange(len(accum)):
+        for i in range(len(accum)):
             accum[i] ^= x[i]
 
     return accum
@@ -146,7 +147,7 @@ class groestl_state(object):
         assert 8 <= sz <= 512
         assert sz % 8 == 0
         self.sz = sz
-        self.szbytes = self.sz / 8
+        self.szbytes = self.sz // 8
         self.clear()
 
     def clone(self):
@@ -154,7 +155,7 @@ class groestl_state(object):
 
     def add(self, pt):
         self.mbytes += len(pt)
-        self.window.extend(ord(x) for x in pt)
+        self.window.extend(x if isinstance(x, int) else int.from_bytes(x, 'big') for x in pt)
         self.take()
 
     def take(self):
@@ -168,14 +169,14 @@ class groestl_state(object):
         pads = (- self.mbytes - lenbytes - 1) % self.lbytes
         total = self.mbytes + pads + 1 + lenbytes
         assert total % self.lbytes == 0
-        blocks = total / self.lbytes
-        self.add('\x80' + '\x00' * pads + ('%016x' % blocks).decode('hex'))
+        blocks = total // self.lbytes
+        self.add(b'\x80' + b'\x00' * pads + blocks.to_bytes(8, 'big'))
 
         assert len(self.window) == 0
 
         # output transform
         result = xor(self.P(self.state), self.state)
-        return ''.join(chr(x) for x in result)[-self.szbytes:]
+        return bytes(result)[-self.szbytes:]
 
     def compress(self, m):
         pr = self.P(xor(m, self.state))
@@ -214,7 +215,7 @@ class groestl_state(object):
             self.Q = self.Q1024
        
         self.mbytes = 0
-        self.lbytes = self.l / 8
+        self.lbytes = self.l // 8
         self.window = []
         self.state = []
         self.set_iv()
@@ -283,13 +284,13 @@ class groestl_state(object):
     
     @staticmethod
     def add_round_constant_p(v, i, sz):
-        szbytes = sz / 8
+        szbytes = sz // 8
         constant = [0] * szbytes
 
         rows = 8
-        cols = szbytes / rows
+        cols = szbytes // rows
 
-        for col in xrange(cols):
+        for col in range(cols):
             constant[col * rows] = (col * 16) ^ i
 
         groestl_state.dump('add-round-constant(P-%d) for round %d' % (sz, i),
@@ -299,13 +300,13 @@ class groestl_state(object):
 
     @staticmethod
     def add_round_constant_q(v, i, sz):
-        szbytes = sz / 8
+        szbytes = sz // 8
         constant = [0xff] * szbytes
 
         rows = 8
-        cols = szbytes / 8
+        cols = szbytes // 8
 
-        for col in xrange(cols):
+        for col in range(cols):
             constant[col * rows + rows - 1] = (0xff - col * 16) ^ i
 
         groestl_state.dump('add-round-constant(Q-%d) for round %d' % (sz, i),
@@ -331,11 +332,11 @@ class groestl_state(object):
     @staticmethod
     def shift_bytes(v, indices):
         rows = len(indices)
-        cols = len(v) / rows
+        cols = len(v) // rows
         v = list(v)
 
         def getrow(vv, i):
-            return [vv[col * rows + i] for col in xrange(cols)]
+            return [vv[col * rows + i] for col in range(cols)]
         def setrow(vv, i, new):
             for col, n in enumerate(new):
                 vv[col * rows + i] = n
@@ -387,11 +388,11 @@ class groestl_state(object):
             return R
         
         rows = 8
-        cols = len(v) / rows
+        cols = len(v) // rows
         v = list(v)
 
         groestl_state.dump('mix-bytes(before)', v)
-        for col in xrange(cols):
+        for col in range(cols):
             v[col * rows:col * rows + rows] = matmul(mixbytes_matrix,
                                                      v[col * rows:col * rows + rows])
         groestl_state.dump('mix-bytes(after)', v)
@@ -410,22 +411,3 @@ class groestl(base_hash):
     def finalise(self):
         # finalise cloned state, so we don't double-pad
         return self.state.clone().finalise()
-
-if __name__ == '__main__':
-    test_vectors = {
-        224: dict(abc = 'ed7bb299331c99ee485d49c22d368f05d9158f2055b9605676786f43',
-                  abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq = 'b7b310994ad64eb635141fce7a8494703da7db05099a89fdd004c940'),
-        256: dict(abc = 'f3c1bb19c048801326a7efbcf16e3d7887446249829c379e1840d1a3a1e7d4d2',
-                  abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq = '22c23b160e561f80924d44f2cc5974cd5a1d36f69324211861e63b9b6cb7974c'),
-        384: dict(abc = '32c39f82ab41ee4fdb1582f83dde41089d47b904988b1a9a647553cb1a502cf07df7eb1e11dc3d66bec096a39a790336',
-                  abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopqopqrpqrsqrstrstustuvtuvwuvwxvwxywxyzxyzayzabzabcabcdbcdecdefdefg = '33625fdddcc2809a83b912d70910d3b5e1408ef017c949617c5543bb835939f13484e60bfe6ff27acf225c7a4b596504'),
-        512: dict(abc = '70e1c68c60df3b655339d67dc291cc3f1dde4ef343f11b23fdd44957693815a75a8339c682fc28322513fd1f283c18e53cff2b264e06bf83a2f0ac8c1f6fbff6',
-                  abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopqopqrpqrsqrstrstustuvtuvwuvwxvwxywxyzxyzayzabzabcabcdbcdecdefdefg = '9f0867f941b5f3f2520e7b60b6e615eca82b61e2c5dd810f562450466f6a80fd72e6391f829dea656c4f84cdd7615e2098a99336d330b7226299e4139d3def75')
-    }
-
-    for sz, vectors in test_vectors.items():
-        for pt, hexpect in vectors.items():
-            hgot = groestl(sz).digest(pt).encode('hex')
-            assert hexpect == hgot
-    print 'test-vectors ok'
-
