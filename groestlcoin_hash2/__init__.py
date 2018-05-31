@@ -1,4 +1,4 @@
-from groestl import groestl
+from .groestl import groestl
 
 def groestl_hash(x):
     """Double groestl512 hash."""
