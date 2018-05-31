@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name = 'groestlcoin_hash2',
-    version = '1.0',
+    version = '1.1',
     description = 'Pure python Groestlcoin hash algorithm.',
     maintainer = 'Kefkius',
     maintainer_email = 'kefkius@mail.com',
