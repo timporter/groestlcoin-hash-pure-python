@@ -11,7 +11,9 @@ class base_hash(object):
     
     def digest(self, pt = None):
         self.update(pt)
-        return self.finalise()
+        finalisedResult = self.finalise()
+        groestl_state.dump('Finalised result', finalisedResult)
+        return finalisedResult
 
 def xor(*args):
     assert len(args) > 0
@@ -185,19 +187,16 @@ class groestl_state(object):
 
     @staticmethod
     def dump(why, v):
-        return
-        
-        """
-        print why + ': '
-        assert len(v) % 8 == 0
-
-        if len(v) == 8:
-            for x in v:
-                print '%02x' % x
-        else:
-            for x in xrange(0, len(v) / 8):
-                print ' '.join('%02x' % y for y in v[x::8])
-        """
+              
+        print(why + ': ')
+        buffer = ''
+        for x in range(0, len(v)):
+            buffer = buffer + ''.join('%02x ' % (v[x]))
+            if (x % 16 == 15):
+                print(buffer)
+                buffer = ''
+        if (len(buffer) != 0):
+            print(buffer)
 
     def show_state(self, why):
         groestl_state.dump(why, self.state)
